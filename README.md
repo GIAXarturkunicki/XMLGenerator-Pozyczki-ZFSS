@@ -34,3 +34,7 @@ Ta aplikacja generuje pliki XML dla wniosków pożyczkowych w systemie ZFSS, kor
 - **Definicja**: Definicja umowy.
 - **KwotaRaty**: Kwota raty.
 
+### Kompilacja
+ ```sh
+ pyinstaller app.py --onefile -w 
+ ```
