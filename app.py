@@ -220,10 +220,12 @@ class XMLGeneratorGUI:
                 bilans_otwarcia.text = "False"
                 indywidualny_rachunek_bankowy = ET.SubElement(pozyczka, "IndywidualnyRachunekBankowy")
 
-                pozyczka_extension = ET.SubElement(pozyczka, 'PozyczkaExtension', id=f'PozyczkaExtension_{generate_id()}')
+                xa = ET.SubElement(pozyczka, 'PozyczkaExtension')
+                pozyczka_extension = ET.SubElement(xa, 'PozyczkaExtension', id=f'PozyczkaExtension_{generate_id()}')
                 host = ET.SubElement(pozyczka_extension, 'Host')
                 host.text = f'Pozyczka_{pozyczka_id}'
                 numer_pozyczki = ET.SubElement(pozyczka_extension, 'NumerPozyczki')
+                numer_pozyczki.text = str(record['Numer umowy/pożyczki'])
                 uwagi = ET.SubElement(pozyczka_extension, 'Uwagi')
 
                 zyranci = ET.SubElement(pozyczka, 'Żyranci')
