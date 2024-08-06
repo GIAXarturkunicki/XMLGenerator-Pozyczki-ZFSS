@@ -5,7 +5,7 @@ import xml.etree.ElementTree as ET
 import uuid
 from xml.dom import minidom
 
-class XMLGeneratorGUI:
+class FileChooserApp:
     def __init__(self, root):
         self.root = root
         self.root.title("Pozyczki migrator xml")
@@ -14,15 +14,22 @@ class XMLGeneratorGUI:
         self.label1.pack(pady=5)
         self.file_path1 = tk.Entry(root, width=50)
         self.file_path1.pack(pady=5)
-        self.browse_button1 = tk.Button(root, text="Pliki", command=self.browse_file1)
+        self.browse_button1 = tk.Button(root, text="Browse", command=self.browse_file1)
         self.browse_button1.pack(pady=5)
 
         self.label2 = tk.Label(root, text="Plik z kodem i guidem:")
         self.label2.pack(pady=5)
         self.file_path2 = tk.Entry(root, width=50)
         self.file_path2.pack(pady=5)
-        self.browse_button2 = tk.Button(root, text="Pliki", command=self.browse_file2)
+        self.browse_button2 = tk.Button(root, text="Browse", command=self.browse_file2)
         self.browse_button2.pack(pady=5)
+
+        self.label3 = tk.Label(root, text="Plik z historia splat:")
+        self.label3.pack(pady=5)
+        self.file_path3 = tk.Entry(root, width=50)
+        self.file_path3.pack(pady=5)
+        self.browse_button3 = tk.Button(root, text="Browse", command=self.browse_file3)
+        self.browse_button3.pack(pady=5)
 
         self.process_button = tk.Button(root, text="Generuj pozyczki do XML", command=self.process_files)
         self.process_button.pack(pady=20)
@@ -39,17 +46,25 @@ class XMLGeneratorGUI:
             self.file_path2.delete(0, tk.END)
             self.file_path2.insert(0, file_path)
 
+    def browse_file3(self):
+        file_path = filedialog.askopenfilename(filetypes=[("Excel files", "*.xlsx")])
+        if file_path:
+            self.file_path3.delete(0, tk.END)
+            self.file_path3.insert(0, file_path)        
+
     def process_files(self):
         file1_path = self.file_path1.get()
         file2_path = self.file_path2.get()
+        file3_path = self.file_path3.get()
 
         if not file1_path or not file2_path:
-            messagebox.showerror("Error", "Wymagane sa oba pliki")
+            messagebox.showerror("Error", "Please select both files.")
             return
 
         try:
             plik1 = pd.read_excel(file1_path)
             plik2 = pd.read_excel(file2_path)
+            plik3 = pd.read_excel(file3_path)
 
             def format_code(kod):
                 return '9' + str(kod).zfill(6)[-6:]
@@ -71,16 +86,18 @@ class XMLGeneratorGUI:
 
             output_path = "wynik.xlsx"
             plik1.to_excel(output_path, index=False)
-            messagebox.showinfo("Success", "Zapiasno wynik.xlsx.")
+            messagebox.showinfo("Success", "Files processed and saved to wynik.xlsx.")
 
             self.run_second_process()
 
         except Exception as e:
-            messagebox.showerror("Error", f"{e}")
+            messagebox.showerror("Error", f"An error occurred: {e}")
 
     def run_second_process(self):
         try:
             df = pd.read_excel("wynik.xlsx")
+           # hf = pd.read_excel("As historie pożyczek ZFŚS.xlsx")
+            hf = pd.read_excel(self.file_path3.get())
 
             
             model_xml_content = """<?xml version="1.0" encoding="Unicode"?>
@@ -162,7 +179,8 @@ class XMLGeneratorGUI:
 
                 fundusz = ET.SubElement(pozyczka, 'Fundusz')
                 fundusz.text = f'FundPozyczkowy_{fund_id}'
-
+                
+        
                 data = ET.SubElement(pozyczka, "Data")
                 data.text = str(record['Data'])
 
@@ -170,7 +188,7 @@ class XMLGeneratorGUI:
                 stan.text = "NieSpłacona"
 
                 kwota = ET.SubElement(pozyczka, "Kwota")
-                kwota.text = f"{record['Kwota']} PLN"
+                kwota.text = f"{record['Kwota pożyczki']} PLN"
 
                 element = ET.SubElement(pozyczka, "Element")
                 element.text = "49c56125-e7f5-4b5a-b858-8701e7d304f6"
@@ -193,7 +211,7 @@ class XMLGeneratorGUI:
                 ilosc_rat.text = str(record['IloscRat'])
 
                 kwota_raty = ET.SubElement(pozyczka, "KwotaRaty")
-                kwota_raty.text = f"{record['KwotaRaty']} PLN"
+                kwota_raty.text =str( f"{record['KwotaRaty']} PLN")
 
                 splata_roznicy = ET.SubElement(pozyczka, "SplataRoznicy")
                 splata_roznicy.text = "OstatniąRatą"
@@ -220,6 +238,7 @@ class XMLGeneratorGUI:
                 bilans_otwarcia.text = "False"
                 indywidualny_rachunek_bankowy = ET.SubElement(pozyczka, "IndywidualnyRachunekBankowy")
 
+
                 xa = ET.SubElement(pozyczka, 'PozyczkaExtension')
                 pozyczka_extension = ET.SubElement(xa, 'PozyczkaExtension', id=f'PozyczkaExtension_{generate_id()}')
                 host = ET.SubElement(pozyczka_extension, 'Host')
@@ -228,16 +247,170 @@ class XMLGeneratorGUI:
                 numer_pozyczki.text = str(record['Numer umowy/pożyczki'])
                 uwagi = ET.SubElement(pozyczka_extension, 'Uwagi')
 
+                raty = ET.SubElement(pozyczka,"Raty")
+                odsetki_calkowite = float(record['Kwota pożyczki'])*float(record['Procent'])/100
+                kwota_raty = float(record['KwotaRaty'])
+
+                q = 1
+                kapital_suma = 0
+                for i,r in hf.iterrows():
+                    if int(record['POZ_ID']) == int(r['POZ_ID']):
+                    
+                        if q == 1: 
+                            historia_splat = generuj_historie_splat(r,pozyczka_id,True,odsetki_calkowite)
+                            raty.append(historia_splat)
+                            kapital_suma = kapital_suma + (float(r['PPOZ_RATA_WNIESIONA']) - odsetki_calkowite)
+                        else: 
+                            print(kapital_suma+kwota_raty)
+                            if kapital_suma+kwota_raty > float(record['Kwota pożyczki']):
+                                print("aaa")
+                                #ostatni rekord 
+                                historia_splat = generuj_historie_splat_last(r,pozyczka_id,False,odsetki_calkowite,(float(record['Kwota pożyczki'])-(kapital_suma)))
+                                raty.append(historia_splat)  
+                                break  
+                            elif i == len(hf) -1:
+                                print("aaa")
+                                historia_splat = generuj_historie_splat_last(r,pozyczka_id,False,odsetki_calkowite,(float(record['Kwota pożyczki'])-(kapital_suma)))
+                                raty.append(historia_splat)  
+                                break  
+                            else:
+                                historia_splat = generuj_historie_splat(r,pozyczka_id,False,odsetki_calkowite)
+                                kwota_wplacona = float(r['PPOZ_RATA_WNIESIONA'])
+                                if kwota_wplacona >0:
+                        
+                                   
+                                    kapital_suma = kapital_suma+ kwota_wplacona
+                                else:
+                                    
+                                    kapital_suma = kapital_suma + float(r['PPOZ_KWOTA_RATY'])
+                                raty.append(historia_splat)
+                                
+
+
+                        q = q+1
                 zyranci = ET.SubElement(pozyczka, 'Żyranci')
                 zyranci.append(create_zyrant_pozyczki(pozyczka_id, record, False))
                 zyranci.append(create_zyrant_pozyczki(pozyczka_id, record, True))
+
+                
+
+
+                
+                    
                 return pozyczka
+            
+            def generuj_historie_splat(record,pozyczka_id,czyPierwsza,odsetki_calkowite):
+                bil = False
+                kwota_wplacona = float(record['PPOZ_RATA_WNIESIONA'])
+
+
+                historia_raty_id = generate_id()
+                raty = ET.Element("RataPozyczki",id=f"RataPozyczki_{historia_raty_id}")  
+
+                pozyczka = ET.SubElement(raty,"Pozyczka")
+                pozyczka.text = str(f"Pozyczka_{pozyczka_id}")
+
+                zyrant = ET.SubElement(raty,"Zyrant") 
+
+                stan = ET.SubElement(raty,"Stan")
+                
+                if kwota_wplacona > 0:
+                    stan.text = "Całkowicie"
+                    bil = True
+                else:
+                    stan.text = "NieSpłacona"    
+            
+
+                splacajacy = ET.SubElement(raty, "Splacajacy")
+
+                data = ET.SubElement(raty, "Data")
+                data.text = str(record['PPOZ_DATA'])
+
+                element = ET.SubElement(raty, "Element")
+                element.text = "e90e6b4c-a5f6-4077-8f3a-de35d493a98d"
+
+                kapital = ET.SubElement(raty, "Kapital")
+                odsetki = ET.SubElement(raty, "Odsetki")
+                if czyPierwsza:
+                    
+                    kw_raty = kwota_wplacona - odsetki_calkowite
+                    
+                   
+                    kapital.text = str(kw_raty)
+
+       
+                    odsetki.text = str(odsetki_calkowite)
+                else:
+                        
+                    if kwota_wplacona >0:
+                        
+                        kapital.text = str(kwota_wplacona)
+                        #kapital_suma = kapital_suma+ kwota_wplacona
+                    else:
+                        kapital.text = str(record['PPOZ_KWOTA_RATY'])
+                        #kapital_suma = kapital_suma + float(record['PPOZ_KWOTA_RATY'])
+   
+                    odsetki.text = "0 PLN"
+
+                bilans_otwarcia = ET.SubElement(raty, "BilansOtwarcia")
+                bilans_otwarcia.text = str(bil)
+
+                return raty
+            
+            def generuj_historie_splat_last(record,pozyczka_id,czyPierwsza,odsetki_calkowite,kwota_do):
+                kwota_wplacona = float(record['PPOZ_RATA_WNIESIONA'])
+
+
+                historia_raty_id = generate_id()
+                raty = ET.Element("RataPozyczki",id=f"RataPozyczki_{historia_raty_id}")  
+
+                pozyczka = ET.SubElement(raty,"Pozyczka")
+                pozyczka.text = str(f"Pozyczka_{pozyczka_id}")
+
+                zyrant = ET.SubElement(raty,"Zyrant") 
+
+                stan = ET.SubElement(raty,"Stan")
+                
+                if kwota_wplacona > 0:
+                    stan.text = "Całkowicie"
+                else:
+                    stan.text = "NieSpłacona"    
+            
+
+                splacajacy = ET.SubElement(raty, "Splacajacy")
+
+                data = ET.SubElement(raty, "Data")
+                data.text = str(record['PPOZ_DATA'])
+
+                element = ET.SubElement(raty, "Element")
+                element.text = "e90e6b4c-a5f6-4077-8f3a-de35d493a98d"
+
+                kapital = ET.SubElement(raty, "Kapital")
+                odsetki = ET.SubElement(raty, "Odsetki")
+        
+                kw_raty = kwota_wplacona - odsetki_calkowite
+
+                   
+                kapital.text = str(kwota_do)
+
+       
+               
+                odsetki.text = "0 PLN"
+
+                bilans_otwarcia = ET.SubElement(raty, "BilansOtwarcia")
+                bilans_otwarcia.text = "False"
+
+                return raty
 
             for _, row in df.iterrows():
                 new_fund, fund_id = create_fund_pozyczkowy(row)
                 root.append(new_fund)
                 new_pozyczka = create_pozyczki(row, fund_id)
                 root.append(new_pozyczka)
+
+              
+
+
 
             def prettify(elem):
                 rough_string = ET.tostring(elem, 'utf-8')
@@ -248,12 +421,16 @@ class XMLGeneratorGUI:
             with open("dane.xml", "w", encoding='utf-8') as f:
                 f.write(pretty_xml_as_string)
 
-            messagebox.showinfo("Success", "Zapisano dane.xml.")
+            messagebox.showinfo("Success", "Second process completed and saved to dane.xml.")
 
         except Exception as e:
-            messagebox.showerror("Error", f": {e}")
+            messagebox.showerror("Error", f"An error occurred: {e}")
+
+         
+
+
 
 if __name__ == "__main__":
     root = tk.Tk()
-    app = XMLGeneratorGUI(root)
+    app = FileChooserApp(root)
     root.mainloop()
